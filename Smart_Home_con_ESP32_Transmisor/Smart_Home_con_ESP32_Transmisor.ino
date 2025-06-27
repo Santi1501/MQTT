@@ -1,110 +1,95 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
+
+#define Boton_living 5
+#define Boton_cocina 18
+#define Boton_dormitorio 19
+#define Boton_bathroom 21
+#define pin_ldr 32
+
 WiFiClient espClient;
+// Creamos un cliente de MQTT con la conexión a internet via wifi
 PubSubClient client(espClient);
-bool living = false, cocina = false, dormitorio = false, baño = false;
 
-#define LIVING_PIN     13
-#define COCINA_PIN     14
-#define DORMITORIO_PIN 26
-#define BAO_PIN       33
-
-void callback(char* topic, byte* payload, unsigned int length) {
-  String topic1 = String(topic);
-  Serial.println("algo mrecibido");
-  if (topic1 == "casa/luz/belau/living") { // LIVING
-    if (living == false)
-    {
-      Serial.println("Luz del living encendida.");
-      digitalWrite(LIVING_PIN, HIGH);
-      living = true;
-    }
-    else {
-      Serial.println("Luz del living apagada.");
-      digitalWrite(LIVING_PIN, LOW);
-      living = false;
-    }
-  } 
-
-  else if (topic1 == "casa/luz/belau/cocina") { // COCINA
-    if (cocina == false)
-    {
-      Serial.println("Luz de la cocina encendida.");
-      digitalWrite(COCINA_PIN, HIGH);
-      cocina = true;
-    }
-    else {
-      Serial.println("Luz de la cocina apagada.");
-      digitalWrite(COCINA_PIN, LOW);
-      cocina = false;
-    }
-  } 
-
-  else if (topic1 == "casa/luz/belau/dormitorio") { // DORMITORIO
-    if (dormitorio == false)
-    {
-      Serial.println("Luz del dormitorio encendida.");
-      digitalWrite(DORMITORIO_PIN, HIGH);
-      dormitorio = true;
-    }
-    else {
-      Serial.println("Luz del dormitorio apagada.");
-      digitalWrite(DORMITORIO_PIN, LOW);
-      dormitorio = false;
-    }
-  } 
-
-  else if (topic1 == "casa/luz/belau/bathroom") { // BAÑO
-    if (baño == false)
-    {
-      Serial.println("Luz del baño encendida.");
-      digitalWrite(BAO_PIN, HIGH);
-      baño = true;
-    }
-    else {
-      Serial.println("Luz del baño apagada.");
-      digitalWrite(BAO_PIN, LOW);
-      baño = false;
-    }
-  }
-
-  Serial.println("-------------------------------------------");
-}
-
+bool estadoLiving = HIGH, estadoCocina = HIGH, estadoBathroom = HIGH, estadoDormitorio = HIGH, estadoTodas = HIGH;
+int CoolDown = 0;
 
 void setup() {
+
+  pinMode(Boton_living, INPUT_PULLUP);
+  pinMode(Boton_cocina, INPUT_PULLUP);
+  pinMode(Boton_dormitorio, INPUT_PULLUP);
+  pinMode(Boton_bathroom, INPUT_PULLUP);
+
   Serial.begin(115200);
 
   // Conectarse a una red por nombre + contraseña
-  WiFi.begin("iPhone de Morci","morcilover123");
+  WiFi.begin("iPhone de Morci", "morcilover123");
 
-  while (WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED){
+    
+    Serial.printf("\nConectando Wi-Fi");
     delay(500);
-    Serial.println("Conectando WiFi...");
+
   }
 
-  Serial.println("WiFi conectado con exito!");
+  if (WiFi.status() == WL_CONNECTED){
+    
+    Serial.printf("\nWi-Fi conectado");
 
-  client.setCallback(callback);
+  }
+
+  // Realizamos la conexión con el servidor
   client.setServer("broker.hivemq.com", 1883);
-  client.connect("belmonte"); // devuelve un booleano indicando si se conecto correctamente
+  client.connect("laurogod"); // devuelve un booleano indicando si se conecto correctamente
 
-  if (!client.connected()) {
-    Serial.println("MQTT no conectado, reintentando...");
-    client.connect("belmonte");
-  } else {
-    Serial.println("MQTT conectado.");
-  }
-
-  client.subscribe("casa/luz/belau/+"); // seguir patron del topico a escuchar
-  Serial.println("-------------------------------------------");
-
-  pinMode(LIVING_PIN, OUTPUT);
-  pinMode(COCINA_PIN, OUTPUT);
-  pinMode(DORMITORIO_PIN, OUTPUT);
-  pinMode(BAO_PIN, OUTPUT);
+  while (client.connected() == false) {
+    Serial.println("Esperando...");
+  } // devuelve un booleano que nos permite chequear si la conexión fue exitosa
 }
 
 void loop() {
-  client.loop();
+  CoolDown++;
+
+  if(CoolDown == 200000) {
+    estadoLiving = HIGH;
+    estadoCocina = HIGH; 
+    estadoBathroom = HIGH;
+    estadoDormitorio = HIGH;
+    Serial.println(analogRead(pin_ldr));
+
+    estadoTodas = HIGH;
+
+    CoolDown = 0;
+  }
+
+  if(digitalRead(Boton_living) == LOW && estadoLiving == HIGH) {
+    client.publish("casa/luz/belau/living", "ON");
+    Serial.println("Luz living.");
+    estadoLiving = LOW;
+    }
+
+  if(digitalRead(Boton_cocina) == LOW && estadoCocina == HIGH){
+    client.publish("casa/luz/belau/cocina", "ON");
+    Serial.println("Luz cocina.");
+    estadoCocina = LOW;
+  }
+
+  if(digitalRead(Boton_dormitorio) == LOW && estadoDormitorio == HIGH) {
+    client.publish("casa/luz/belau/dormitorio", "ON");
+    Serial.println("Luz dormitorio.");
+    estadoDormitorio = LOW;
+  }
+
+  if(digitalRead(Boton_bathroom) == LOW && estadoBathroom == HIGH){
+    client.publish("casa/luz/belau/bathroom", "ON");
+    Serial.println("Luz bathroom.");
+    estadoBathroom = LOW;
+  }
+
+  if(analogRead(pin_ldr) <= 700 && estadoTodas == HIGH){
+    client.publish("casa/luz/belau/todas", "ON");
+    Serial.println("Luz todas.");
+    estadoTodas = LOW;
+  }
 }
